@@ -1,0 +1,6 @@
+{
+  "name": "GateSense",
+  "description": "GenAI-powered stadium navigation and crowd assistant for fans at FIFA World Cup 2026.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
