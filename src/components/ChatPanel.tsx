@@ -15,6 +15,10 @@ interface ChatPanelProps {
   gates: GateData[];
 }
 
+/**
+ * Renders the interactive fan chat assistant panel.
+ * Supports multiple languages, simulation presets, real-time response logs, and ARIA attributes for screen readers.
+ */
 export default function ChatPanel({ messages, onSendMessage, isLoading, gates }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -85,11 +89,16 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
       </div>
 
       {/* Message Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-5 min-h-0 bg-black/20">
+      <div 
+        className="flex-1 overflow-y-auto p-5 space-y-5 min-h-0 bg-black/20" 
+        role="log" 
+        aria-live="polite" 
+        aria-label="Chat Message History"
+      >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
             <div className="p-5 rounded-lg bg-white/5 border border-white/10 text-white/70 max-w-sm flex flex-col items-center">
-              <Sparkles className="w-8 h-8 text-cybercyan mb-2.5 animate-pulse" />
+              <Sparkles className="w-8 h-8 text-cybercyan mb-2.5 animate-pulse" aria-hidden="true" />
               <p className="text-xs font-mono text-white tracking-wide uppercase mb-1">
                 Awaiting Fan Situation
               </p>
@@ -103,13 +112,14 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
               <span className="text-[10px] text-white/40 uppercase tracking-widest font-mono block">
                 Quick Evaluator Scenarios
               </span>
-              <div className="flex flex-col gap-1.5 text-left">
+              <div className="flex flex-col gap-1.5 text-left" role="group" aria-label="Quick start query presets">
                 {presets.map((preset, idx) => (
                   <button
                     key={idx}
                     onClick={() => handlePresetClick(preset.text)}
-                    className="text-xs p-3 rounded bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 text-left transition truncate cursor-pointer font-sans"
+                    className="text-xs p-3 rounded bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 text-left transition truncate cursor-pointer font-sans focus:outline-none focus:ring-1 focus:ring-cybercyan"
                     id={`preset-${idx}`}
+                    aria-label={`Ask preset: ${preset.label}`}
                   >
                     {preset.label}
                   </button>
@@ -217,15 +227,16 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
 
       {/* Suggestion Chips (when some messages already exist) */}
       {messages.length > 0 && (
-        <div className="px-4 py-2 bg-black/40 border-t border-white/10 overflow-x-auto whitespace-nowrap flex gap-1.5 scrollbar-none">
+        <div className="px-4 py-2 bg-black/40 border-t border-white/10 overflow-x-auto whitespace-nowrap flex gap-1.5 scrollbar-none" role="group" aria-label="Additional query presets">
           <span className="text-[9px] font-mono text-white/30 shrink-0 uppercase tracking-widest self-center mr-1">PRESETS:</span>
           {presets.map((preset, idx) => (
             <button
               key={idx}
               onClick={() => handlePresetClick(preset.text)}
               disabled={isLoading}
-              className="text-[10px] bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 rounded px-2.5 py-1.5 font-mono transition disabled:opacity-50 inline-block cursor-pointer"
+              className="text-[10px] bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 rounded px-2.5 py-1.5 font-mono transition disabled:opacity-50 inline-block cursor-pointer focus:outline-none focus:ring-1 focus:ring-cybercyan"
               id={`preset-inline-${idx}`}
+              aria-label={`Ask preset: ${preset.label}`}
             >
               {preset.label}
             </button>
@@ -234,7 +245,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
       )}
 
       {/* Form Input */}
-      <form onSubmit={handleSubmit} className="p-4 bg-black/60 border-t border-white/10 flex gap-2">
+      <form onSubmit={handleSubmit} className="p-4 bg-black/60 border-t border-white/10 flex gap-2" role="form" aria-label="Ask crowd copilot panel">
         <label htmlFor="fan-query-input" className="sr-only">Ask crowd copilot</label>
         <input
           id="fan-query-input"
@@ -243,13 +254,14 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type your situation (e.g. 'Estoy cerca de la Puerta B, ¿cómo llego a la sección 214?')"
           disabled={isLoading}
-          className="flex-1 bg-white/5 hover:bg-white/10 focus:bg-black text-sm text-white px-4 py-3.5 rounded-lg border border-white/10 focus:border-cybercyan transition outline-none placeholder-white/30 font-light"
+          aria-required="true"
+          className="flex-1 bg-white/5 hover:bg-white/10 focus:bg-black text-sm text-white px-4 py-3.5 rounded-lg border border-white/10 focus:border-cybercyan transition outline-none placeholder-white/30 font-light focus:ring-1 focus:ring-cybercyan"
           autoComplete="off"
         />
         <button
           type="submit"
           disabled={isLoading || !input.trim()}
-          className="bg-white/10 hover:bg-cybercyan/20 text-white hover:text-black border border-white/10 hover:border-cybercyan disabled:bg-white/5 disabled:border-white/10 disabled:text-white/20 px-5 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+          className="bg-white/10 hover:bg-cybercyan/20 text-white hover:text-black border border-white/10 hover:border-cybercyan disabled:bg-white/5 disabled:border-white/10 disabled:text-white/20 px-5 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-cybercyan"
           aria-label="Send query"
           id="chat-send-btn"
         >

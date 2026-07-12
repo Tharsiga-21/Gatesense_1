@@ -13,11 +13,11 @@ import { GateData } from "../types";
  * @throws Error if validation fails
  */
 export function validateAndNormalizeGate(rawName: any, rawDensity: any): { name: string; density: number } {
-  if (rawName === undefined || rawName === null) {
+  if (rawName === undefined || rawName === null || String(rawName).trim() === "") {
     throw new Error("Gate name is missing");
   }
   
-  if (rawDensity === undefined || rawDensity === null) {
+  if (rawDensity === undefined || rawDensity === null || String(rawDensity).trim() === "") {
     throw new Error("Gate density is missing");
   }
 
@@ -103,8 +103,9 @@ export function parseCrowdCSV(csvText: string): GateData[] {
       const { name, density } = validateAndNormalizeGate(parts[0], parts[1]);
       const timestamp = parts[2] || new Date().toISOString();
       results.push({ name, density, timestamp });
-    } catch (err: any) {
-      throw new Error(`Line ${i + 1} error: ${err.message}`);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Line ${i + 1} error: ${errMsg}`);
     }
   }
 
@@ -124,8 +125,9 @@ export function parseCrowdJSON(jsonText: string): GateData[] {
   let parsed: any;
   try {
     parsed = JSON.parse(jsonText);
-  } catch (err: any) {
-    throw new Error(`Invalid JSON format: ${err.message}`);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid JSON format: ${errMsg}`);
   }
 
   const list = Array.isArray(parsed) ? parsed : [parsed];
@@ -145,8 +147,9 @@ export function parseCrowdJSON(jsonText: string): GateData[] {
     try {
       const { name, density } = validateAndNormalizeGate(gateKey, densityKey);
       results.push({ name, density, timestamp });
-    } catch (err: any) {
-      throw new Error(`Item ${i + 1} ("${gateKey || 'unknown'}") error: ${err.message}`);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Item ${i + 1} ("${gateKey || 'unknown'}") error: ${errMsg}`);
     }
   }
 

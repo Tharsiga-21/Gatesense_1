@@ -64,8 +64,9 @@ Gate F,15,2026-07-12T08:00:00Z`;
         onDataParsed(parsed);
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
-      } catch (err: any) {
-        setError(err.message || "Failed to parse crowd file.");
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setError(errMsg || "Failed to parse crowd file.");
       }
     };
     reader.readAsText(file);
@@ -80,13 +81,14 @@ Gate F,15,2026-07-12T08:00:00Z`;
       onDataParsed(parsed);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || "Failed to load sample data.");
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setError(errMsg || "Failed to load sample data.");
     }
   };
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-lg p-5 space-y-4" id="upload-panel">
+    <div className="bg-white/5 border border-white/10 rounded-lg p-5 space-y-4" id="upload-panel" role="region" aria-label="Crowd Data Injector">
       <div>
         <h3 className="text-xs font-mono uppercase text-white/50 tracking-wider flex items-center gap-2">
           <FileUp className="w-3.5 h-3.5 text-cybercyan" />
