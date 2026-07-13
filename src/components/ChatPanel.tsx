@@ -78,11 +78,11 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
             <h3 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
               GateSense <span className="text-cybercyan text-[10px] font-mono tracking-widest uppercase">CO-PILOT</span>
             </h3>
-            <p className="text-[10px] text-white/40 font-mono uppercase tracking-tighter">AI Reasoning Engine: Gemini-3.5-Flash</p>
+            <p className="text-[10px] text-white/60 font-mono uppercase tracking-tighter">AI Reasoning Engine: Gemini-3.5-Flash</p>
           </div>
         </div>
 
-        <div className="text-[9px] font-mono uppercase tracking-widest text-white/40 flex items-center gap-1.5">
+        <div className="text-[9px] font-mono uppercase tracking-widest text-white/60 flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
           Operational
         </div>
@@ -102,14 +102,14 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
               <p className="text-xs font-mono text-white tracking-wide uppercase mb-1">
                 Awaiting Fan Situation
               </p>
-              <p className="text-[11px] text-white/50 leading-relaxed font-light">
+              <p className="text-[11px] text-white/70 leading-relaxed font-light">
                 Describe your current location gate, target section, or urgency in any language (e.g. Spanish, French, Portuguese, German, or English).
               </p>
             </div>
             
             {/* Quick Presets */}
             <div className="w-full max-w-md space-y-2">
-              <span className="text-[10px] text-white/40 uppercase tracking-widest font-mono block">
+              <span className="text-[10px] text-white/60 uppercase tracking-widest font-mono block">
                 Quick Evaluator Scenarios
               </span>
               <div className="flex flex-col gap-1.5 text-left" role="group" aria-label="Quick start query presets">
@@ -162,34 +162,34 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
                             <Compass className="w-3 h-3 text-cybercyan" />
                             REASONING CHAIN
                           </span>
-                          <span className="text-[9px] px-2 py-0.5 rounded font-mono text-white/50 bg-white/5 border border-white/10">
+                          <span className="text-[9px] px-2 py-0.5 rounded font-mono text-white/70 bg-white/5 border border-white/10">
                             {msg.data.isFallback ? "OFFLINE_FALLBACK" : "GEMINI_API_LIVE"}
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 text-[10px] font-mono text-white/50">
+                        <div className="grid grid-cols-2 gap-3 text-[10px] font-mono text-white/70">
                           <div>
-                            <span className="block text-[9px] tracking-wider text-white/30">DETECTED_LOCALE</span>
+                            <span className="block text-[9px] tracking-wider text-white/50">DETECTED_LOCALE</span>
                             <span className="text-white flex items-center gap-1 font-sans mt-0.5">
                               <Globe2 className="w-3 h-3 text-cybercyan shrink-0" />
                               {msg.data.detectedLanguage.toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <span className="block text-[9px] tracking-wider text-white/30">RECOMMENDED_ACCESS</span>
+                            <span className="block text-[9px] tracking-wider text-white/50">RECOMMENDED_ACCESS</span>
                             <span className="text-cybercyan font-bold font-mono mt-0.5">
                               {msg.data.recommendedGate === "NONE" ? "NONE (EMERGENCY_LOCK)" : `GATE ${msg.data.recommendedGate}`}
                             </span>
                           </div>
                         </div>
 
-                        <p className="text-xs text-white/70 leading-relaxed italic">
+                        <p className="text-xs text-white/80 leading-relaxed italic">
                           {msg.data.reasoning}
                         </p>
                       </motion.div>
                     )}
 
-                    <div className="text-[9px] text-white/30 px-1 font-mono uppercase">
+                    <div className="text-[9px] text-white/50 px-1 font-mono uppercase">
                       {msg.role === "user" ? "Fan Inquiry" : "AI Assistant"} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
@@ -245,28 +245,34 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
       )}
 
       {/* Form Input */}
-      <form onSubmit={handleSubmit} className="p-4 bg-black/60 border-t border-white/10 flex gap-2" role="form" aria-label="Ask crowd copilot panel">
-        <label htmlFor="fan-query-input" className="sr-only">Ask crowd copilot</label>
-        <input
-          id="fan-query-input"
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your situation (e.g. 'Estoy cerca de la Puerta B, ¿cómo llego a la sección 214?')"
-          disabled={isLoading}
-          aria-required="true"
-          className="flex-1 bg-white/5 hover:bg-white/10 focus:bg-black text-sm text-white px-4 py-3.5 rounded-lg border border-white/10 focus:border-cybercyan transition outline-none placeholder-white/30 font-light focus:ring-1 focus:ring-cybercyan"
-          autoComplete="off"
-        />
-        <button
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          className="bg-white/10 hover:bg-cybercyan/20 text-white hover:text-black border border-white/10 hover:border-cybercyan disabled:bg-white/5 disabled:border-white/10 disabled:text-white/20 px-5 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-cybercyan"
-          aria-label="Send query"
-          id="chat-send-btn"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+      <form onSubmit={handleSubmit} className="p-4 bg-black/60 border-t border-white/10 flex flex-col gap-1.5" role="form" aria-label="Ask crowd copilot panel">
+        <p id="query-input-description" className="sr-only">
+          Input your stadium location, target section, or urgency in Spanish, French, Portuguese, German, or English to receive route safety recommendations.
+        </p>
+        <div className="flex gap-2 w-full">
+          <label htmlFor="fan-query-input" className="sr-only">Ask crowd copilot</label>
+          <input
+            id="fan-query-input"
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your situation (e.g. 'Estoy cerca de la Puerta B, ¿cómo llego a la sección 214?')"
+            disabled={isLoading}
+            aria-required="true"
+            aria-describedby="query-input-description"
+            className="flex-1 bg-white/5 hover:bg-white/10 focus:bg-black text-sm text-white px-4 py-3.5 rounded-lg border border-white/10 focus:border-cybercyan transition outline-none placeholder-white/60 font-light focus:ring-1 focus:ring-cybercyan"
+            autoComplete="off"
+          />
+          <button
+            type="submit"
+            disabled={isLoading || !input.trim()}
+            className="bg-white/10 hover:bg-cybercyan/20 text-white hover:text-black border border-white/10 hover:border-cybercyan disabled:bg-white/5 disabled:border-white/10 disabled:text-white/20 px-5 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer disabled:cursor-not-allowed focus:outline-none focus:ring-1 focus:ring-cybercyan"
+            aria-label="Send query"
+            id="chat-send-btn"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
       </form>
     </div>
   );

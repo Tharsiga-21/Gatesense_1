@@ -27,22 +27,9 @@ export function validateAndNormalizeGate(rawName: any, rawDensity: any): { name:
   // Strip common gate prefix words to avoid false letter matches (e.g. "GATE" contains A and E)
   nameStr = nameStr.replace(/\b(GATE|PORTE|TOR|PORTAO|PORTÃO|PUERTA)\b/g, "").trim();
 
-  // Extract a letter A-F
-  let letter = "";
-  
-  // Try to find if there is a single letter A-F in the remaining string
-  const match = nameStr.match(/\b([A-F])\b/) || nameStr.match(/^([A-F])$/);
-  if (match) {
-    letter = match[1];
-  } else {
-    // If we have a single character A-F anywhere in the remaining text
-    for (const char of nameStr) {
-      if (char >= 'A' && char <= 'F') {
-        letter = char;
-        break;
-      }
-    }
-  }
+  // Extract a letter A-F using a clean single regex
+  const match = nameStr.match(/[A-F]/);
+  const letter = match ? match[0] : "";
 
   if (!letter) {
     throw new Error(`Invalid or unsupported gate name: "${rawName}". Gate must be A, B, C, D, E, or F.`);

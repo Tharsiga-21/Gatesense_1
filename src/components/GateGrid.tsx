@@ -25,30 +25,30 @@ interface GateGridProps {
 function getDensityColor(density: number) {
   if (density < 50) {
     return {
-      text: "text-emerald-400",
+      text: "text-emerald-300 font-medium",
       label: "LOW CONGESTION",
       bg: "bg-emerald-500/5",
       border: "border-emerald-500/20",
-      accent: "bg-emerald-500",
-      icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />,
+      accent: "bg-emerald-400",
+      icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 shrink-0" aria-hidden="true" />,
     };
   } else if (density <= 80) {
     return {
-      text: "text-amber-400",
+      text: "text-amber-300 font-medium",
       label: "MODERATE FLOW",
       bg: "bg-amber-500/5",
       border: "border-amber-500/20",
-      accent: "bg-amber-500",
-      icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />,
+      accent: "bg-amber-400",
+      icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0" aria-hidden="true" />,
     };
   } else {
     return {
-      text: "text-rose-500 font-semibold",
+      text: "text-rose-400 font-semibold",
       label: "CRITICAL CONGESTION",
       bg: "bg-rose-500/5 shadow-[0_0_20px_rgba(239,68,68,0.08)]",
       border: "border-rose-500/30",
       accent: "bg-rose-500",
-      icon: <XOctagon className="w-3.5 h-3.5 text-rose-500 shrink-0" aria-hidden="true" />,
+      icon: <XOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" aria-hidden="true" />,
     };
   }
 }
@@ -112,9 +112,9 @@ export default function GateGrid({ gates, isCustomData, onQuickCapacityChange }:
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-3 text-[9px] text-white/30 font-mono">
+          <div className="flex items-center justify-between mt-3 text-[9px] text-white/60 font-mono">
             <span className="flex items-center gap-1">
-              <Users className="w-3 h-3 text-white/20" aria-hidden="true" />
+              <Users className="w-3 h-3 text-white/50" aria-hidden="true" />
               {gate.density > 80 ? "CONGESTED" : "NORMAL FLOW"}
             </span>
             <span>{new Date(gate.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
@@ -129,11 +129,11 @@ export default function GateGrid({ gates, isCustomData, onQuickCapacityChange }:
       {/* Header and Live Badge */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
         <div>
-          <h2 className="text-sm font-mono text-white/50 uppercase tracking-tighter italic flex items-center gap-2">
+          <h2 className="text-sm font-mono text-white/70 uppercase tracking-tighter italic flex items-center gap-2">
             <Activity className="w-4 h-4 text-cybercyan" aria-hidden="true" />
             Live Density Monitoring
           </h2>
-          <p className="text-[11px] text-slate-400 font-light mt-0.5">
+          <p className="text-[11px] text-slate-200 font-light mt-0.5">
             Real-time checkpoint flow across all primary stadium gates
           </p>
         </div>

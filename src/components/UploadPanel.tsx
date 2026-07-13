@@ -90,11 +90,11 @@ Gate F,15,2026-07-12T08:00:00Z`;
   return (
     <div className="bg-white/5 border border-white/10 rounded-lg p-5 space-y-4" id="upload-panel" role="region" aria-label="Crowd Data Injector">
       <div>
-        <h3 className="text-xs font-mono uppercase text-white/50 tracking-wider flex items-center gap-2">
+        <h3 className="text-xs font-mono uppercase text-white/70 tracking-wider flex items-center gap-2">
           <FileUp className="w-3.5 h-3.5 text-cybercyan" />
           Crowd Data Injector (CSV / JSON)
         </h3>
-        <p className="text-[11px] text-slate-400 font-light mt-1">
+        <p className="text-[11px] text-slate-200 font-light mt-1">
           Upload custom gate sensor data to override simulated live feed. Gate letter extraction and bounds are validated.
         </p>
       </div>
@@ -102,13 +102,22 @@ Gate F,15,2026-07-12T08:00:00Z`;
       {/* Drag & Drop simulated area */}
       <div
         onClick={() => fileInputRef.current?.click()}
-        className="border border-dashed border-white/20 hover:border-cybercyan/50 bg-black/30 rounded-lg p-5 text-center cursor-pointer hover:bg-white/5 transition duration-150"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label="Upload CSV or JSON crowd sensor data override file"
+        className="border border-dashed border-white/20 hover:border-cybercyan/50 bg-black/30 rounded-lg p-5 text-center cursor-pointer hover:bg-white/5 focus:bg-white/5 transition duration-150 focus:outline-none focus:ring-1 focus:ring-cybercyan"
       >
-        <FileUp className="w-7 h-7 text-white/30 mx-auto mb-2" />
-        <span className="text-xs text-slate-300 font-medium block font-mono">
+        <FileUp className="w-7 h-7 text-white/60 mx-auto mb-2" />
+        <span className="text-xs text-slate-200 font-medium block font-mono">
           CLICK TO UPLOAD <span className="text-cybercyan">.CSV</span> OR <span className="text-cybercyan">.JSON</span>
         </span>
-        <span className="text-[10px] text-white/30 block mt-1">
+        <span className="text-[10px] text-white/60 block mt-1">
           Must define gate letters A-F and densities 0-100
         </span>
         <input
@@ -137,13 +146,13 @@ Gate F,15,2026-07-12T08:00:00Z`;
             </button>
           </div>
         ) : (
-          <span className="text-[10px] text-white/30 font-mono uppercase">Status: Awaiting override file</span>
+          <span className="text-[10px] text-white/60 font-mono uppercase">Status: Awaiting override file</span>
         )}
       </div>
 
       {/* Quick Sample Load Buttons */}
       <div className="p-3.5 bg-black/30 rounded-lg border border-white/5 space-y-2">
-        <span className="text-[10px] font-mono text-white/50 block uppercase tracking-wider">
+        <span className="text-[10px] font-mono text-white/70 block uppercase tracking-wider">
           Demo Mock Presets (Parser validation test)
         </span>
         <div className="grid grid-cols-2 gap-2">

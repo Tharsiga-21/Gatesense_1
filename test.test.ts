@@ -3,11 +3,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { validateAndNormalizeGate, parseCrowdCSV, parseCrowdJSON } from "./src/utils/parser";
 import { detectLanguage, generateLocalReasoning } from "./src/utils/reasoningFallback";
-import { validateRequest, handleFallback } from "./server";
+import { validateRequest, handleFallback, callGeminiModel } from "./server";
 import { GateData } from "./src/types";
+
+// Mock @google/genai so that callGeminiModel does not call the real API during tests
+vi.mock("@google/genai", () => {
+  return {
+    GoogleGenAI: class {
+      models = {
+        generateContent: vi.fn().mockResolvedValue({
+          text: JSON.stringify({
+            recommendedGate: "C",
+            reasoning: "Gate C is at 10% density which is much safer than Gate B at 85%.",
+            detectedLanguage: "English",
+            response: "Please use Gate C for the safest and fastest entrance."
+          })
+        })
+      };
+    },
+    Type: {
+      OBJECT: "OBJECT",
+      STRING: "STRING"
+    }
+  };
+});
 
 describe("GateSense Safety & Parser Test Suite", () => {
   
@@ -198,6 +220,70 @@ Gate A,,2026-07-12T08:00:00Z`;
       const result = handleFallback("near Gate B", validGates, "Simulated network timeout");
       expect(result.isFallback).toBe(true);
       expect(result.recommendedGate).toBe("A"); // B is 75%, A is 30% -> redirects to A
+    });
+
+    test("callGeminiModel correctly uses response schema and handles mock call response", async () => {
+      const mockGenerateContent = vi.fn().mockResolvedValue({
+        text: JSON.stringify({
+          recommendedGate: "C",
+          reasoning: "Gate C is at 10% density which is much safer than Gate B at 75%.",
+          detectedLanguage: "English",
+          response: "Please use Gate C for safe entrance."
+        })
+      });
+      const mockAi = {
+        models: {
+          generateContent: mockGenerateContent
+        }
+      } as any;
+
+      const result = await callGeminiModel("I am near Gate B", validGates, mockAi);
+      expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+      expect(result.recommendedGate).toBe("C");
+      expect(result.detectedLanguage).toBe("English");
+      expect(result.isFallback).toBe(false);
+    });
+
+    test("callGeminiModel propagates standard errors when model call throws", async () => {
+      const mockAi = {
+        models: {
+          generateContent: vi.fn().mockRejectedValue(new Error("API Overloaded / Quota Limit"))
+        }
+      } as any;
+
+      await expect(callGeminiModel("hello", validGates, mockAi)).rejects.toThrow("API Overloaded / Quota Limit");
+    });
+
+    test("API endpoint falls back gracefully to local reasoning when callGeminiModel throws", async () => {
+      const originalKey = process.env.GEMINI_API_KEY;
+      process.env.GEMINI_API_KEY = "dummy_invalid_key_to_force_api_failure";
+
+      // Import serverInstance to retrieve the dynamic bound port to prevent port collisions
+      const { serverInstance } = await import("./server");
+      const address = serverInstance ? serverInstance.address() : null;
+      const port = typeof address === "object" && address ? address.port : 3000;
+
+      try {
+        const response = await fetch(`http://localhost:${port}/api/gates/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: "I am near Gate B, which gate is best?",
+            gates: [
+              { name: "Gate A", density: 30, timestamp: new Date().toISOString() },
+              { name: "Gate B", density: 85, timestamp: new Date().toISOString() }
+            ]
+          })
+        });
+
+        expect(response.status).toBe(200);
+        const data = await response.json() as any;
+        expect(data.isFallback).toBe(true);
+        expect(data.recommendedGate).toBe("A");
+        expect(data.reasoning).toContain("Gate B is at 85%");
+      } finally {
+        process.env.GEMINI_API_KEY = originalKey;
+      }
     });
   });
 });

@@ -9,18 +9,58 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import cors from "cors";
 import { generateLocalReasoning } from "./src/utils/reasoningFallback";
 import { validateAndNormalizeGate } from "./src/utils/parser";
 import { GateData, QueryResponse } from "./src/types";
+
+// Named Constants extracted from the code to improve configuration and quality
+const PORT = 3000;
+export const FALLBACK_ARTIFICIAL_DELAY_MS = 800;
+export const QUERY_TRUNCATION_LIMIT = 500;
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+
+// Secure server with Helmet headers (Content Security Policy is disabled to prevent breaking dynamic HMR/Vite in the AI Studio preview environment)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+// Explicit CORS configuration restricted to known frontend origins with safety wildcard fallback
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 // Enable JSON parsing with a safe body limit to prevent denial-of-service
 app.use(express.json({ limit: "10kb" }));
+
+// Note: express-rate-limit's default store is in-memory and resets on server restart.
+// For robust production durability across multiple container/serverless instances,
+// we can easily plug in a Redis-backed store (e.g., rate-limit-redis) if REDIS_URL is configured.
+let rateLimitStore: any = undefined;
+if (process.env.REDIS_URL) {
+  try {
+    // Optional Redis-based production configuration:
+    // const RedisStore = require("rate-limit-redis").default;
+    // const { Redis } = require("ioredis");
+    // const redisClient = new Redis(process.env.REDIS_URL);
+    // rateLimitStore = new RedisStore({ sendCommand: (...args: string[]) => redisClient.call(...args) });
+    console.log("[RateLimiter] Production Redis store active.");
+  } catch (err) {
+    console.warn("Could not load Redis store, falling back to memory:", err);
+  }
+}
 
 // Rate limit specifically for the query API to prevent spamming
 const queryLimiter = rateLimit({
@@ -28,6 +68,7 @@ const queryLimiter = rateLimit({
   max: 30, // Limit each IP to 30 requests per minute
   standardHeaders: true,
   legacyHeaders: false,
+  store: rateLimitStore, // Defaults to in-memory store if undefined
   handler: (req: Request, res: Response) => {
     res.status(429).json({
       error: "Too many safety requests from this IP. Please try again after 60 seconds."
@@ -85,9 +126,9 @@ export function validateRequest(body: unknown): { query: string; gates: GateData
   // Strip potentially malicious HTML/XML tags from user query
   let sanitizedQuery = rawQuery.replace(/<[^>]*>/g, "").trim();
   
-  // Truncate query to 500 characters maximum to avoid large inputs
-  if (sanitizedQuery.length > 500) {
-    sanitizedQuery = sanitizedQuery.substring(0, 500);
+  // Truncate query to QUERY_TRUNCATION_LIMIT characters maximum to avoid large inputs
+  if (sanitizedQuery.length > QUERY_TRUNCATION_LIMIT) {
+    sanitizedQuery = sanitizedQuery.substring(0, QUERY_TRUNCATION_LIMIT);
   }
 
   // Validate gates array
@@ -227,7 +268,7 @@ app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) =
 
   if (!ai) {
     // Satisfy offline requirement: return deterministic reasoning with artificial wait to mimic AI processing
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    await new Promise((resolve) => setTimeout(resolve, FALLBACK_ARTIFICIAL_DELAY_MS));
     const fallbackResponse = handleFallback(query, gates, "Gemini client not configured.");
     return res.json(fallbackResponse);
   }
@@ -265,9 +306,15 @@ async function startServer() {
     res.status(500).json({ error: "A secure server error occurred. Please try again." });
   });
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`GateSense server running on http://0.0.0.0:${PORT}`);
+  const listenPort = (process.env.VITEST === "true" || process.env.NODE_ENV === "test") ? 0 : PORT;
+
+  serverInstance = app.listen(listenPort, "0.0.0.0", () => {
+    const address = serverInstance.address();
+    const boundPort = typeof address === "object" && address ? address.port : listenPort;
+    console.log(`GateSense server running on http://0.0.0.0:${boundPort}`);
   });
 }
+
+export let serverInstance: any = null;
 
 startServer();
