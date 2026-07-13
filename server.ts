@@ -85,18 +85,20 @@ let aiClient: GoogleGenAI | null = null;
  * @returns {GoogleGenAI | null} The GoogleGenAI instance, or null if key is missing/placeholder.
  */
 function getGeminiClient(): GoogleGenAI | null {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "" || key === "dummy_invalid_key_to_force_api_failure") {
+    aiClient = null;
+    return null;
+  }
   if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (key && key !== "MY_GEMINI_API_KEY" && key.trim() !== "") {
-      aiClient = new GoogleGenAI({
-        apiKey: key,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build",
-          },
+    aiClient = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
         },
-      });
-    }
+      },
+    });
   }
   return aiClient;
 }
@@ -312,9 +314,17 @@ async function startServer() {
     const address = serverInstance.address();
     const boundPort = typeof address === "object" && address ? address.port : listenPort;
     console.log(`GateSense server running on http://0.0.0.0:${boundPort}`);
+    if (resolveServerReady) {
+      resolveServerReady(boundPort);
+    }
   });
 }
 
 export let serverInstance: any = null;
+
+let resolveServerReady: (port: number) => void;
+export const serverReady = new Promise<number>((resolve) => {
+  resolveServerReady = resolve;
+});
 
 startServer();

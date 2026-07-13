@@ -258,10 +258,9 @@ Gate A,,2026-07-12T08:00:00Z`;
       const originalKey = process.env.GEMINI_API_KEY;
       process.env.GEMINI_API_KEY = "dummy_invalid_key_to_force_api_failure";
 
-      // Import serverInstance to retrieve the dynamic bound port to prevent port collisions
-      const { serverInstance } = await import("./server");
-      const address = serverInstance ? serverInstance.address() : null;
-      const port = typeof address === "object" && address ? address.port : 3000;
+      // Import serverReady and await the bound port to eliminate any server startup race conditions
+      const { serverReady } = await import("./server");
+      const port = await serverReady;
 
       try {
         const response = await fetch(`http://localhost:${port}/api/gates/query`, {
