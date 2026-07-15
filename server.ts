@@ -16,8 +16,7 @@ import { validateAndNormalizeGate } from "./src/utils/parser";
 import { GateData, QueryResponse } from "./src/types";
 
 // Named Constants extracted from the code to improve configuration and quality
-const PORT = 3000;
-export const FALLBACK_ARTIFICIAL_DELAY_MS = 800;
+const PORT = process.env.PORT || 3000;export const FALLBACK_ARTIFICIAL_DELAY_MS = 800;
 export const QUERY_TRUNCATION_LIMIT = 500;
 
 // Load environment variables
