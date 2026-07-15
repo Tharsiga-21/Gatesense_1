@@ -15,6 +15,29 @@ interface ChatPanelProps {
   gates: GateData[];
 }
 
+const PRESETS = [
+  {
+    label: "🇺🇸 Near B, Section 214",
+    text: "I'm near Gate B, trying to reach Section 214, entrance closes in 20 minutes"
+  },
+  {
+    label: "🇪🇸 Cerca de Puerta B, Sec 214",
+    text: "Estoy cerca de la Puerta B, intento llegar a la Sección 214, la entrada cierra en 20 minutos"
+  },
+  {
+    label: "🇫🇷 Porte C, Sec 105",
+    text: "Je suis près de la Porte C, j'essaie d'atteindre la section 105"
+  },
+  {
+    label: "🇩🇪 Tor F, Sektor 120",
+    text: "Ich bin bei Tor F und muss zu Sektor 120"
+  },
+  {
+    label: "🇧🇷 Portão B, Seção 203",
+    text: "Perto do Portão B para a Seção 203, faltam 15 minutos"
+  }
+];
+
 /**
  * Renders the interactive fan chat assistant panel.
  * Supports multiple languages, simulation presets, real-time response logs, and ARIA attributes for screen readers.
@@ -22,29 +45,6 @@ interface ChatPanelProps {
 export default function ChatPanel({ messages, onSendMessage, isLoading, gates }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const presets = [
-    {
-      label: "🇺🇸 Near B, Section 214",
-      text: "I'm near Gate B, trying to reach Section 214, entrance closes in 20 minutes"
-    },
-    {
-      label: "🇪🇸 Cerca de Puerta B, Sec 214",
-      text: "Estoy cerca de la Puerta B, intento llegar a la Sección 214, la entrada cierra en 20 minutos"
-    },
-    {
-      label: "🇫🇷 Porte C, Sec 105",
-      text: "Je suis près de la Porte C, j'essaie d'atteindre la section 105"
-    },
-    {
-      label: "🇩🇪 Tor F, Sektor 120",
-      text: "Ich bin bei Tor F und muss zu Sektor 120"
-    },
-    {
-      label: "🇧🇷 Portão B, Seção 203",
-      text: "Perto do Portão B para a Seção 203, faltam 15 minutos"
-    }
-  ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -76,7 +76,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
           </div>
           <div>
             <h3 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5">
-              GateSense <span className="text-cybercyan text-[10px] font-mono tracking-widest uppercase">AI Assistant</span>
+              GateSense <span className="text-cybercyan text-[10px] font-mono tracking-widest uppercase">CO-PILOT</span>
             </h3>
             <p className="text-[10px] text-white/60 font-mono uppercase tracking-tighter">AI Reasoning Engine: Gemini-3.5-Flash</p>
           </div>
@@ -113,7 +113,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
                 Quick Evaluator Scenarios
               </span>
               <div className="flex flex-col gap-1.5 text-left" role="group" aria-label="Quick start query presets">
-                {presets.map((preset, idx) => (
+                {PRESETS.map((preset, idx) => (
                   <button
                     key={idx}
                     onClick={() => handlePresetClick(preset.text)}
@@ -140,7 +140,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
                 >
                   <div className={`space-y-2.5 max-w-[90%] ${msg.role === "user" ? "text-right flex flex-col items-end" : "text-left flex flex-col items-start"}`}>
                     <div
-                      className={`px-4 py-3 rounded-xl text-sm leading-relaxed ${
+                      className={`px-4 py-3 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
                         msg.role === "user"
                           ? "bg-white/10 text-white font-light rounded-tr-none"
                           : "bg-cybercyan/10 border border-cybercyan/20 text-cybercyan rounded-tl-none font-medium"
@@ -154,7 +154,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
-                        className="reasoning-box p-4 rounded-r-lg max-w-[95%] space-y-2.5 text-left"
+                        className="reasoning-box p-4 rounded-r-lg max-w-[95%] space-y-2.5 text-left w-full bg-white/5 border border-white/5"
                         id={`cognitive-reasoning-${msg.id}`}
                       >
                         <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
@@ -183,7 +183,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
                           </div>
                         </div>
 
-                        <p className="text-xs text-white/80 leading-relaxed italic">
+                        <p className="text-xs text-white/80 leading-relaxed italic border-t border-white/5 pt-2">
                           {msg.data.reasoning}
                         </p>
                       </motion.div>
@@ -229,7 +229,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
       {messages.length > 0 && (
         <div className="px-4 py-2 bg-black/40 border-t border-white/10 overflow-x-auto whitespace-nowrap flex gap-1.5 scrollbar-none" role="group" aria-label="Additional query presets">
           <span className="text-[9px] font-mono text-white/30 shrink-0 uppercase tracking-widest self-center mr-1">PRESETS:</span>
-          {presets.map((preset, idx) => (
+          {PRESETS.map((preset, idx) => (
             <button
               key={idx}
               onClick={() => handlePresetClick(preset.text)}

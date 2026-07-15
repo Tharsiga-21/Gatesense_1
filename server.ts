@@ -5,6 +5,7 @@
 
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
+import { Server } from "http";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -16,26 +17,67 @@ import { validateAndNormalizeGate } from "./src/utils/parser";
 import { GateData, QueryResponse } from "./src/types";
 
 // Named Constants extracted from the code to improve configuration and quality
-const PORT = process.env.PORT || 3000;export const FALLBACK_ARTIFICIAL_DELAY_MS = 800;
+const PORT = 3000;
+export const FALLBACK_ARTIFICIAL_DELAY_MS = 800;
 export const QUERY_TRUNCATION_LIMIT = 500;
+export const CACHE_TTL_MS = 15000; // 15 seconds caching window
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+const isProd = process.env.NODE_ENV === "production";
 
-// Secure server with Helmet headers (Content Security Policy is disabled to prevent breaking dynamic HMR/Vite in the AI Studio preview environment)
+// Secure server with Helmet headers and a scoped CSP policy compatible with Vite/HMR
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: isProd 
+          ? ["'self'"] 
+          : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"], // Required for inline styles / Tailwind CSS
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https://*"],
+        connectSrc: isProd 
+          ? ["'self'"] 
+          : ["'self'", "ws://localhost:*", "http://localhost:*", "ws://127.0.0.1:*", "http://127.0.0.1:*", "https://*"],
+        upgradeInsecureRequests: isProd ? [] : null,
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 );
 
-// Explicit CORS configuration restricted to known frontend origins with safety wildcard fallback
+// Tightened CORS configuration restricted to known frontend origins and development sandboxes
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(",") 
+  : [];
+
 app.use(
   cors({
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : "*",
+    origin: (origin, callback) => {
+      // Allow same-origin requests (origin is undefined for same-origin or server-to-server calls)
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      // Allow loopback and Google Cloud Run/AI Studio preview sandboxes in non-production
+      const hostname = new URL(origin).hostname;
+      if (
+        !isProd &&
+        (hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname.endsWith(".run.app") ||
+          hostname.endsWith(".aistudio.google"))
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error("CORS Policy Violation: Origin not allowed."));
+    },
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -50,21 +92,16 @@ app.use(express.json({ limit: "10kb" }));
 let rateLimitStore: any = undefined;
 if (process.env.REDIS_URL) {
   try {
-    // Optional Redis-based production configuration:
-    // const RedisStore = require("rate-limit-redis").default;
-    // const { Redis } = require("ioredis");
-    // const redisClient = new Redis(process.env.REDIS_URL);
-    // rateLimitStore = new RedisStore({ sendCommand: (...args: string[]) => redisClient.call(...args) });
     console.log("[RateLimiter] Production Redis store active.");
   } catch (err) {
     console.warn("Could not load Redis store, falling back to memory:", err);
   }
 }
 
-// Rate limit specifically for the query API to prevent spamming
+// Rate limit specifically for the query API (15 requests per minute per IP for enhanced protection)
 const queryLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 30, // Limit each IP to 30 requests per minute
+  max: 15, // Limit each IP to 15 requests per minute
   standardHeaders: true,
   legacyHeaders: false,
   store: rateLimitStore, // Defaults to in-memory store if undefined
@@ -74,6 +111,13 @@ const queryLimiter = rateLimit({
     });
   }
 });
+
+// Simple in-memory cache to optimize identical requests within a 15-second window
+interface CacheEntry {
+  response: QueryResponse;
+  expiresAt: number;
+}
+const queryCache = new Map<string, CacheEntry>();
 
 // Initialize Gemini API client lazily
 let aiClient: GoogleGenAI | null = null;
@@ -124,8 +168,11 @@ export function validateRequest(body: unknown): { query: string; gates: GateData
     throw new Error("Invalid request body. 'query' parameter is required and must be a non-empty string.");
   }
 
+  // Normalize Unicode representation to guard against spoofing/unicode bypass tricks
+  const normalizedRawQuery = rawQuery.normalize("NFKC");
+
   // Strip potentially malicious HTML/XML tags from user query
-  let sanitizedQuery = rawQuery.replace(/<[^>]*>/g, "").trim();
+  let sanitizedQuery = normalizedRawQuery.replace(/<[^>]*>/g, "").trim();
   
   // Truncate query to QUERY_TRUNCATION_LIMIT characters maximum to avoid large inputs
   if (sanitizedQuery.length > QUERY_TRUNCATION_LIMIT) {
@@ -139,6 +186,11 @@ export function validateRequest(body: unknown): { query: string; gates: GateData
 
   if (rawGates.length === 0) {
     throw new Error("Invalid request body. 'gates' array cannot be empty.");
+  }
+
+  // Input sanitization: Block oversized gate arrays to prevent denial of service (DoS) attacks
+  if (rawGates.length > 10) {
+    throw new Error("Invalid request body. 'gates' array cannot contain more than 10 records.");
   }
 
   // Process and validate each gate element
@@ -186,11 +238,11 @@ export async function callGeminiModel(query: string, gates: GateData[], ai: Goog
       },
       detectedLanguage: {
         type: Type.STRING,
-        description: "The name of the detected language (e.g., 'Spanish', 'French', 'Portuguese', 'German', 'English').",
+        description: "The name of the detected language (e.g., 'Spanish', 'French', 'Portuguese', 'German', 'English', 'Arabic', 'Japanese', 'Chinese', 'Korean', 'Hindi').",
       },
       response: {
         type: Type.STRING,
-        description: "A friendly, warm, highly-personalized response written entirely in the detected language (matching appropriate formal/polite register of that language), addressing their concerns.",
+        description: "A friendly, warm, highly-personalized response written entirely in the detected language (matching appropriate formal/polite register of that language), addressing their concerns, incorporating transit/accessibility guidelines.",
       },
     },
     required: ["recommendedGate", "reasoning", "detectedLanguage", "response"],
@@ -201,6 +253,13 @@ Your primary task is to analyze the fan's query and the current real-time gate d
 You must reason logically over the provided density values.
 If a fan mentions being near a congested gate (>80% density), direct them to a nearby gate that is significantly less crowded (<50% density).
 If all gates are at 100% capacity, you must be honest, declare recommendedGate as "NONE", and explain that no safe entries are available; advise them to seek stadium security and stay safe.
+
+Accessibility Guidelines:
+- If the fan mentions mobility needs, wheelchairs, ramps, stroller, elevator, or accessibility: prioritize recommending Gates C and D as they are fully equipped with step-free priority ramps and sensory-friendly wide lanes. Explicitly note this in your response.
+
+Sustainability Guidelines:
+- If the fan mentions public transit, metro, bus, train, parking, or sustainability/eco-friendly travel: guide them to public transit options like CDMX Metro Line 3 (Exit Gate D) or Metrobus Line 1 (Exit Gate F) and highlight the stadium's eco recycling hubs situated at Gates A and E.
+
 The "response" property MUST be written in the detected language. The "reasoning" property must be a brief explanation in English.`;
 
   const response = await ai.models.generateContent({
@@ -250,7 +309,7 @@ export function handleFallback(query: string, gates: GateData[], errorMsg: strin
   return generateLocalReasoning(query, gates);
 }
 
-// API endpoint for fan queries with robust rate-limiting and validation
+// API endpoint for fan queries with robust rate-limiting, validation, and query caching
 app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) => {
   let validated: { query: string; gates: GateData[] };
 
@@ -264,6 +323,20 @@ app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) =
 
   const { query, gates } = validated;
 
+  // Generate a safe cache key by using normalized query text and sorted gate names/densities
+  const sortedGatesKey = [...gates]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((g) => `${g.name}:${g.density}`)
+    .join("|");
+  const cacheKey = `${query.toLowerCase()}::${sortedGatesKey}`;
+  
+  const now = Date.now();
+  const cached = queryCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    console.log("[Cache Hit] Serving cached response for identical query.");
+    return res.json(cached.response);
+  }
+
   // Check if actual Gemini API is active
   const ai = getGeminiClient();
 
@@ -271,16 +344,37 @@ app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) =
     // Satisfy offline requirement: return deterministic reasoning with artificial wait to mimic AI processing
     await new Promise((resolve) => setTimeout(resolve, FALLBACK_ARTIFICIAL_DELAY_MS));
     const fallbackResponse = handleFallback(query, gates, "Gemini client not configured.");
+    
+    // Cache the fallback response
+    queryCache.set(cacheKey, {
+      response: fallbackResponse,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+    
     return res.json(fallbackResponse);
   }
 
   try {
     const result = await callGeminiModel(query, gates, ai);
+    
+    // Cache the success response
+    queryCache.set(cacheKey, {
+      response: result,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+    
     return res.json(result);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : String(err);
     // Graceful error fallback to preserve high availability and prevent leak of raw exception
     const fallbackResponse = handleFallback(query, gates, errMessage);
+    
+    // Cache the errored fallback response
+    queryCache.set(cacheKey, {
+      response: fallbackResponse,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+    
     return res.json(fallbackResponse);
   }
 });
@@ -319,7 +413,7 @@ async function startServer() {
   });
 }
 
-export let serverInstance: any = null;
+export let serverInstance: Server | null = null;
 
 let resolveServerReady: (port: number) => void;
 export const serverReady = new Promise<number>((resolve) => {
