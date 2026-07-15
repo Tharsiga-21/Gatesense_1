@@ -12,20 +12,28 @@ import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import cors from "cors";
-import { generateLocalReasoning } from "./src/utils/reasoningFallback";
+import { generateLocalReasoning, generateLocalStaffSummary } from "./src/utils/reasoningFallback";
 import { validateAndNormalizeGate } from "./src/utils/parser";
 import { GateData, QueryResponse } from "./src/types";
+import {
+  ACCESSIBILITY_NOTES,
+  SUSTAINABILITY_NOTES,
+  SUPPORTED_LANGUAGES
+} from "./src/utils/localizedContent";
 
 // Named Constants extracted from the code to improve configuration and quality
 const PORT = 3000;
 export const FALLBACK_ARTIFICIAL_DELAY_MS = 800;
 export const QUERY_TRUNCATION_LIMIT = 500;
 export const CACHE_TTL_MS = 15000; // 15 seconds caching window
+const MAX_CACHE_SIZE = 500; // Cap cache size to prevent unbounded memory growth
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+// Enable trust proxy for correct client IP detection under reverse proxy setups (e.g. Render)
+app.set("trust proxy", 1);
 const isProd = process.env.NODE_ENV === "production";
 
 // Secure server with Helmet headers and a scoped CSP policy compatible with Vite/HMR
@@ -118,6 +126,42 @@ interface CacheEntry {
   expiresAt: number;
 }
 const queryCache = new Map<string, CacheEntry>();
+
+/**
+ * Sanitizes messages to prevent sensitive secrets (like GEMINI_API_KEY) from being printed in logs or sent to clients.
+ */
+function sanitizeMessage(msg: string): string {
+  const key = process.env.GEMINI_API_KEY;
+  if (key && key.length > 5 && key !== "MY_GEMINI_API_KEY") {
+    // Escape special regex chars
+    const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    return msg.replace(new RegExp(escapedKey, "g"), "[REDACTED_API_KEY]");
+  }
+  return msg;
+}
+
+/**
+ * Adds an entry to the query cache, enforcing a maximum size limit and evicting older elements.
+ */
+function setInCache(key: string, response: QueryResponse, expiresAt: number): void {
+  const now = Date.now();
+  // Cleanup expired items first
+  for (const [k, entry] of queryCache.entries()) {
+    if (entry.expiresAt <= now) {
+      queryCache.delete(k);
+    }
+  }
+
+  // If over limit, evict the oldest inserted key
+  if (queryCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = queryCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      queryCache.delete(oldestKey);
+    }
+  }
+
+  queryCache.set(key, { response, expiresAt });
+}
 
 // Initialize Gemini API client lazily
 let aiClient: GoogleGenAI | null = null;
@@ -256,9 +300,16 @@ If all gates are at 100% capacity, you must be honest, declare recommendedGate a
 
 Accessibility Guidelines:
 - If the fan mentions mobility needs, wheelchairs, ramps, stroller, elevator, or accessibility: prioritize recommending Gates C and D as they are fully equipped with step-free priority ramps and sensory-friendly wide lanes. Explicitly note this in your response.
+Specifically, you should include or translate the appropriate accessibility note based on the detected language from these pre-translated strings:
+${JSON.stringify(ACCESSIBILITY_NOTES, null, 2)}
 
 Sustainability Guidelines:
 - If the fan mentions public transit, metro, bus, train, parking, or sustainability/eco-friendly travel: guide them to public transit options like CDMX Metro Line 3 (Exit Gate D) or Metrobus Line 1 (Exit Gate F) and highlight the stadium's eco recycling hubs situated at Gates A and E.
+Specifically, you should include or translate the appropriate sustainability note based on the detected language from these pre-translated strings:
+${JSON.stringify(SUSTAINABILITY_NOTES, null, 2)}
+
+Supported Languages Reference:
+${JSON.stringify(SUPPORTED_LANGUAGES, null, 2)}
 
 The "response" property MUST be written in the detected language. The "reasoning" property must be a brief explanation in English.`;
 
@@ -305,7 +356,7 @@ Please reason over this data and provide your recommendation.`,
  */
 export function handleFallback(query: string, gates: GateData[], errorMsg: string): QueryResponse {
   // Safe server logging. Never expose internal stack traces or keys to the client.
-  console.log(`[Cognitive Routing Fallback Triggered] Cause: ${errorMsg}`);
+  console.log(`[Cognitive Routing Fallback Triggered] Cause: ${sanitizeMessage(errorMsg)}`);
   return generateLocalReasoning(query, gates);
 }
 
@@ -346,10 +397,7 @@ app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) =
     const fallbackResponse = handleFallback(query, gates, "Gemini client not configured.");
     
     // Cache the fallback response
-    queryCache.set(cacheKey, {
-      response: fallbackResponse,
-      expiresAt: Date.now() + CACHE_TTL_MS,
-    });
+    setInCache(cacheKey, fallbackResponse, Date.now() + CACHE_TTL_MS);
     
     return res.json(fallbackResponse);
   }
@@ -358,10 +406,7 @@ app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) =
     const result = await callGeminiModel(query, gates, ai);
     
     // Cache the success response
-    queryCache.set(cacheKey, {
-      response: result,
-      expiresAt: Date.now() + CACHE_TTL_MS,
-    });
+    setInCache(cacheKey, result, Date.now() + CACHE_TTL_MS);
     
     return res.json(result);
   } catch (err: unknown) {
@@ -370,12 +415,51 @@ app.post("/api/gates/query", queryLimiter, async (req: Request, res: Response) =
     const fallbackResponse = handleFallback(query, gates, errMessage);
     
     // Cache the errored fallback response
-    queryCache.set(cacheKey, {
-      response: fallbackResponse,
-      expiresAt: Date.now() + CACHE_TTL_MS,
-    });
+    setInCache(cacheKey, fallbackResponse, Date.now() + CACHE_TTL_MS);
     
     return res.json(fallbackResponse);
+  }
+});
+
+// API endpoint for staff operational summary
+app.post("/api/staff/summary", express.json(), async (req: Request, res: Response) => {
+  try {
+    const { gates } = req.body;
+    if (!gates || !Array.isArray(gates)) {
+      return res.status(400).json({ error: "Invalid gates array provided" });
+    }
+
+    const ai = getGeminiClient();
+    if (!ai) {
+      await new Promise((resolve) => setTimeout(resolve, FALLBACK_ARTIFICIAL_DELAY_MS));
+      const summary = generateLocalStaffSummary(gates);
+      return res.json({ summary, isFallback: true });
+    }
+
+    const prompt = `You are the GateSense AI Operations Intelligence system, assisting organizers, venue staff, and volunteers at Estadio Azteca for World Cup 2026.
+
+Current gate density snapshots:
+${JSON.stringify(gates, null, 2)}
+
+Provide a concise, high-impact 2-3 sentence operational guidance summary in English for the stadium control staff. 
+Focus strictly on crowd flow, identifying heavily congested bottlenecks (>80% density), and proposing immediate redirection of pedestrian foot traffic to clear gates (<50% density). 
+Do NOT use markdown. Keep the response direct, professional, and actionable.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.3,
+      },
+    });
+
+    const summaryText = response.text?.trim() || generateLocalStaffSummary(gates);
+    return res.json({ summary: summaryText, isFallback: false });
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.warn("[Staff Summary API Error]", sanitizeMessage(errMessage));
+    const summary = generateLocalStaffSummary(req.body?.gates || []);
+    return res.json({ summary, isFallback: true });
   }
 });
 
@@ -397,7 +481,8 @@ async function startServer() {
 
   // Error handling middleware to block raw leaks
   app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
-    console.error("Global Server Error:", err);
+    const errorStr = err instanceof Error ? err.stack || err.message : String(err);
+    console.error("Global Server Error:", sanitizeMessage(errorStr));
     res.status(500).json({ error: "A secure server error occurred. Please try again." });
   });
 

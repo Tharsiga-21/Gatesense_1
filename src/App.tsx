@@ -9,7 +9,9 @@ import GateGrid from "./components/GateGrid";
 import UploadPanel from "./components/UploadPanel";
 import ChatPanel from "./components/ChatPanel";
 import { generateLocalReasoning } from "./utils/reasoningFallback";
-import { Compass, ShieldCheck, Flame, Globe2, Sparkles, Trophy, HelpCircle } from "lucide-react";
+import { Compass, ShieldCheck, Flame, Globe2, Sparkles, Trophy, HelpCircle, Radio } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import StaffDashboard from "./components/StaffDashboard";
 
 const INITIAL_GATES: GateData[] = [
   { name: "Gate A", density: 38, timestamp: new Date().toISOString() },
@@ -25,30 +27,62 @@ export default function App() {
   const [isCustomData, setIsCustomData] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [view, setView] = useState<"fan" | "staff">("fan");
+  const [sessionQueryCount, setSessionQueryCount] = useState<number>(0);
 
   // Live sensor auto-updating (simulate slightly ticking densities over time)
   useEffect(() => {
     if (isCustomData) return;
 
-    const interval = setInterval(() => {
-      setGates((prev) =>
-        prev.map((g) => {
-          // Keep fluctuating but stay within 5% to 95% to avoid jumping to 100% too easily
-          const delta = Math.floor(Math.random() * 7) - 3; // -3 to +3
-          let nextDensity = g.density + delta;
-          if (nextDensity < 5) nextDensity = 5;
-          if (nextDensity > 98) nextDensity = 98;
+    let intervalId: NodeJS.Timeout | null = null;
 
-          return {
-            ...g,
-            density: nextDensity,
-            timestamp: new Date().toISOString(),
-          };
-        })
-      );
-    }, 4500);
+    const startInterval = () => {
+      if (intervalId) return;
+      intervalId = setInterval(() => {
+        setGates((prev) =>
+          prev.map((g) => {
+            // Keep fluctuating but stay within 5% to 95% to avoid jumping to 100% too easily
+            const delta = Math.floor(Math.random() * 7) - 3; // -3 to +3
+            let nextDensity = g.density + delta;
+            if (nextDensity < 5) nextDensity = 5;
+            if (nextDensity > 98) nextDensity = 98;
 
-    return () => clearInterval(interval);
+            return {
+              ...g,
+              density: nextDensity,
+              timestamp: new Date().toISOString(),
+            };
+          })
+        );
+      }, 4500);
+    };
+
+    const stopInterval = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    // Initial start if page is visible
+    if (!document.hidden) {
+      startInterval();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopInterval();
+      } else {
+        startInterval();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopInterval();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [isCustomData]);
 
   // Handle uploader data override
@@ -105,6 +139,7 @@ export default function App() {
 
   // Send message to the reasoning engine API
   const handleSendMessage = async (text: string) => {
+    setSessionQueryCount((prev) => prev + 1);
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -166,16 +201,36 @@ export default function App() {
           <div className="w-8 h-8 bg-cybercyan rounded-sm flex items-center justify-center font-bold text-black text-sm">GS</div>
           <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-white flex items-center">
             GateSense
-            <span className="text-cybercyan text-[10px] sm:text-xs font-mono ml-2 uppercase tracking-wide">v1.0.4 - WC2026 Edition</span>
+            <span className="text-cybercyan text-[10px] sm:text-xs font-mono ml-2 uppercase tracking-wide hidden md:inline">v1.0.4 - WC2026</span>
           </h1>
         </div>
+
+        {/* Dynamic View Toggle */}
+        <div className="flex bg-white/5 border border-white/10 rounded-md p-0.5 font-mono text-[10px] sm:text-xs">
+          <button
+            id="toggle-fan-view"
+            className={`px-2.5 py-1 sm:px-4 sm:py-1 rounded-md cursor-pointer font-medium transition-all duration-250 flex items-center gap-1 ${view === "fan" ? "bg-cybercyan text-black font-semibold shadow-sm" : "text-white/60 hover:text-white"}`}
+            onClick={() => setView("fan")}
+          >
+            FAN VIEW
+          </button>
+          <button
+            id="toggle-staff-view"
+            className={`px-2.5 py-1 sm:px-4 sm:py-1 rounded-md cursor-pointer font-medium transition-all duration-250 flex items-center gap-1.5 ${view === "staff" ? "bg-amber-500 text-black font-semibold shadow-sm animate-pulse" : "text-white/60 hover:text-white"}`}
+            onClick={() => setView("staff")}
+          >
+            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping inline-block"></span>
+            STAFF VIEW
+          </button>
+        </div>
+
         <div className="flex items-center gap-4 sm:gap-6 text-[10px] sm:text-xs font-mono uppercase tracking-widest text-white/60">
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            System: Operational
+            System: Live
           </div>
-          <div className="px-2.5 py-1 bg-white/5 rounded border border-white/10 text-white/80">
-            Stadium: Azteca / CDMX
+          <div className="px-2.5 py-1 bg-white/5 rounded border border-white/10 text-white/80 hidden sm:block">
+            Azteca / CDMX
           </div>
         </div>
       </header>
@@ -196,14 +251,39 @@ export default function App() {
           />
         </section>
 
-        {/* Right Side: Chat Assistant (5/12 cols) */}
-        <section className="lg:col-span-5">
-          <ChatPanel
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-            gates={gates}
-          />
+        {/* Right Side: Chat Assistant or Staff Operations Dashboard (5/12 cols) */}
+        <section className="lg:col-span-5" id="right-side-view-container">
+          <AnimatePresence mode="wait">
+            {view === "fan" ? (
+              <motion.div
+                key="fan-view"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ChatPanel
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  isLoading={isLoading}
+                  gates={gates}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="staff-view"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.2 }}
+              >
+                <StaffDashboard
+                  gates={gates}
+                  sessionQueryCount={sessionQueryCount}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
       </main>
 
@@ -220,7 +300,7 @@ export default function App() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
               <h3 className="font-mono text-xs uppercase text-white/80 flex items-center gap-1.5">
                 <Flame className="w-3.5 h-3.5 text-[#00F5FF]" />
@@ -238,6 +318,16 @@ export default function App() {
               </h3>
               <p className="text-xs text-white/50 leading-relaxed font-light">
                 Instead of rigid mechanical translations, the reasoning engine detects the speaker's language register and outputs supportive, reassuring guidance. In Spanish and Portuguese, polite formal pronouns are automatically employed to build reassurance and prompt rapid, stress-free path decisions.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-mono text-xs uppercase text-amber-400 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                Staff Operations & Dispatch
+              </h3>
+              <p className="text-xs text-white/50 leading-relaxed font-light">
+                For organizers and venue staff, GateSense turns passive data into active dispatch guidance. The operations console aggregates sensor streams and leverages generative models to instantly deliver high-quality guidance to help steer crowds away from bottlenecks and optimize terminal throughput.
               </p>
             </div>
           </div>

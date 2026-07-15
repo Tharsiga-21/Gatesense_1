@@ -72,6 +72,22 @@ If no API key is set, or if an API call fails, the application **automatically a
 
 ---
 
+## 📋 Staff Operations & Operational Intelligence
+
+To satisfy the **FIFA World Cup 2026 Prompt Wars Challenge**, GateSense includes a dedicated, additive **Staff Operations View** targeting organizers, venue volunteers, and control staff. This covers the **Operational Intelligence & Real-Time Decision Support** category of the challenge brief.
+
+### 🔑 Features of the Dispatch Console
+1. **Live Checklist Overview:** Displays an at-a-glance dashboard of all gate densities synchronized in real time with active sensor streams.
+2. **Derived Action Indicators:**
+   - **Gates Requiring Attention:** High-impact warning tally counting gates exceeding the critical bottleneck threshold (`HIGH_CONGESTION_THRESHOLD = 80%`).
+   - **Estimated Fan Queries (+LIVE):** A dynamic real-time counter estimating total query volume handled in the last 10 minutes (combining a simulated baseline with actual session-level interaction telemetry).
+3. **Generative Dispatch Guidance:**
+   - Coordinates with a backend `/api/staff/summary` endpoint utilizing **Gemini 2.5 Flash** (`gemini-2.5-flash`) to generate concise, high-impact verbal dispatch actions (2-3 sentences).
+   - Guidance isolates bottlenecks and suggests redirecting incoming pedestrian traffic towards low-density gates (<50%).
+   - Fail-safe Enabled: If the API is offline, a local deterministic reasoning engine instantly formulates dispatch guidance, guaranteeing uninterrupted control operations.
+
+---
+
 ## 📊 Sensor Data & Parser Rules
 
 ### Synthetic Baseline Assumptions
