@@ -127,6 +127,15 @@ interface CacheEntry {
 }
 const queryCache = new Map<string, CacheEntry>();
 
+// Simple in-memory cache specifically for the staff summary to optimize throughput
+interface StaffSummaryCacheEntry {
+  summary: string;
+  isFallback: boolean;
+  expiresAt: number;
+}
+const staffSummaryCache = new Map<string, StaffSummaryCacheEntry>();
+const STAFF_CACHE_TTL_MS = 60000; // 60 seconds TTL for staff operations
+
 /**
  * Sanitizes messages to prevent sensitive secrets (like GEMINI_API_KEY) from being printed in logs or sent to clients.
  */
@@ -314,7 +323,7 @@ ${JSON.stringify(SUPPORTED_LANGUAGES, null, 2)}
 The "response" property MUST be written in the detected language. The "reasoning" property must be a brief explanation in English.`;
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-2.5-flash",
     contents: [
       {
         text: `Fan query: "${query}"
@@ -429,10 +438,27 @@ app.post("/api/staff/summary", express.json(), async (req: Request, res: Respons
       return res.status(400).json({ error: "Invalid gates array provided" });
     }
 
+    // Build a cache key based on simplified state to optimize hit rate:
+    // we care about which gates are above 80% (high), below 50% (low), or moderate (med).
+    const cacheKey = gates.map((g: any) => {
+      const name = String(g.name || "").toLowerCase();
+      const density = Number(g.density) || 0;
+      const status = density > 80 ? "high" : density < 50 ? "low" : "med";
+      return `${name}:${status}`;
+    }).sort().join(",");
+
+    const now = Date.now();
+    const cached = staffSummaryCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return res.json({ summary: cached.summary, isFallback: cached.isFallback });
+    }
+
     const ai = getGeminiClient();
     if (!ai) {
       await new Promise((resolve) => setTimeout(resolve, FALLBACK_ARTIFICIAL_DELAY_MS));
       const summary = generateLocalStaffSummary(gates);
+      // Cache fallback responses too to avoid excessive processing
+      staffSummaryCache.set(cacheKey, { summary, isFallback: true, expiresAt: now + STAFF_CACHE_TTL_MS });
       return res.json({ summary, isFallback: true });
     }
 
@@ -454,6 +480,22 @@ Do NOT use markdown. Keep the response direct, professional, and actionable.`;
     });
 
     const summaryText = response.text?.trim() || generateLocalStaffSummary(gates);
+
+    // Proactively clean up expired entries in cache to prevent memory leaks
+    for (const [k, entry] of staffSummaryCache.entries()) {
+      if (entry.expiresAt <= now) {
+        staffSummaryCache.delete(k);
+      }
+    }
+    // Cap cache size
+    if (staffSummaryCache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = staffSummaryCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        staffSummaryCache.delete(oldestKey);
+      }
+    }
+
+    staffSummaryCache.set(cacheKey, { summary: summaryText, isFallback: false, expiresAt: now + STAFF_CACHE_TTL_MS });
     return res.json({ summary: summaryText, isFallback: false });
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : String(err);

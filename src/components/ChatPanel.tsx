@@ -78,7 +78,7 @@ export default function ChatPanel({ messages, onSendMessage, isLoading, gates }:
             <h3 className="text-sm font-semibold tracking-tight text-white flex items-center gap-1.5" id="chat-title">
               GateSense
             </h3>
-            <p className="text-[10px] text-white/60 font-mono uppercase tracking-tighter">AI Reasoning Engine: Gemini-3.5-Flash</p>
+            <p className="text-[10px] text-white/60 font-mono uppercase tracking-tighter">AI Reasoning Engine: Gemini-2.5-Flash</p>
           </div>
         </div>
 

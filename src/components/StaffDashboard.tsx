@@ -78,10 +78,30 @@ export default function StaffDashboard({ gates, sessionQueryCount }: StaffDashbo
     }
   };
 
+  // Simplify gates state into distinct operational classes (H: High, M: Medium, L: Low)
+  // This avoids spamming the AI API for slight fluctuations (e.g. 54% to 57%)
+  const operationalStateKey = gates
+    .map((g) => `${g.name}:${g.density > 80 ? "H" : g.density < 50 ? "L" : "M"}`)
+    .join(",");
+
   // Fetch summary on load and when gate list configuration changes substantially
   useEffect(() => {
+    if (document.hidden) return;
     fetchSummary();
-  }, [gates.map(g => g.density).join(",")]);
+  }, [operationalStateKey]);
+
+  // Handle document visibility changes (visibility-pause)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchSummary();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [operationalStateKey]);
 
   return (
     <div 
