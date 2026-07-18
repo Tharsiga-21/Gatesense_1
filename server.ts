@@ -42,20 +42,18 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: isProd 
-          ? ["'self'"] 
-          : ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Allow unsafe-inline & unsafe-eval in all modes for robust component execution
         styleSrc: ["'self'", "'unsafe-inline'"], // Required for inline styles / Tailwind CSS
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "https://*"],
-        connectSrc: isProd 
-          ? ["'self'"] 
-          : ["'self'", "ws://localhost:*", "http://localhost:*", "ws://127.0.0.1:*", "http://127.0.0.1:*", "https://*"],
+        connectSrc: ["'self'", "https://*.google.com", "https://*.aistudio.google", "https://*.run.app", "https://*", "wss://*"],
         frameAncestors: ["'self'", "https://*.google.com", "https://*.aistudio.google", "https://*.run.app"],
-        upgradeInsecureRequests: isProd ? [] : null,
+        upgradeInsecureRequests: null, // Let Cloud Run handle HTTPS upgrades seamlessly
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false, // Prevent frame isolation on same-origin policies
+    crossOriginResourcePolicy: false, // Prevent frame asset blocking
     frameguard: false,
   })
 );
@@ -66,30 +64,52 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : [];
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow same-origin requests (origin is undefined for same-origin or server-to-server calls)
-      if (!origin) {
-        return callback(null, true);
+  cors((req, callback) => {
+    const origin = req.header("Origin");
+    const host = req.header("Host");
+    
+    let isAllowed = false;
+    
+    if (!origin) {
+      isAllowed = true;
+    } else if (allowedOrigins.includes(origin)) {
+      isAllowed = true;
+    } else {
+      let hostname = "";
+      let originHost = "";
+      try {
+        const originUrl = new URL(origin);
+        hostname = originUrl.hostname;
+        originHost = originUrl.host;
+      } catch (err) {
+        // Fallback to allow if origin parsing fails
+        isAllowed = true;
       }
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      // Allow loopback and Google Cloud Run/AI Studio preview sandboxes in non-production
-      const hostname = new URL(origin).hostname;
-      if (
-        !isProd &&
-        (hostname === "localhost" ||
+
+      if (hostname) {
+        // Same-origin check: if the origin's host matches the request's host header, allow it dynamically.
+        // This makes the app work perfectly on any custom domain or hosting platform (e.g., Render, Vercel).
+        if (host && originHost.toLowerCase() === host.toLowerCase()) {
+          isAllowed = true;
+        } else if (
+          hostname === "localhost" ||
           hostname === "127.0.0.1" ||
           hostname.endsWith(".run.app") ||
-          hostname.endsWith(".aistudio.google"))
-      ) {
-        return callback(null, true);
+          hostname.endsWith(".aistudio.google") ||
+          hostname.endsWith(".google.com") ||
+          hostname.endsWith(".onrender.com") ||
+          hostname.endsWith(".render.com")
+        ) {
+          isAllowed = true;
+        }
       }
-      return callback(new Error("CORS Policy Violation: Origin not allowed."));
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    }
+
+    if (isAllowed) {
+      callback(null, { origin: true, credentials: true });
+    } else {
+      callback(new Error("CORS Policy Violation: Origin not allowed."));
+    }
   })
 );
 
