@@ -51,10 +51,12 @@ app.use(
         connectSrc: isProd 
           ? ["'self'"] 
           : ["'self'", "ws://localhost:*", "http://localhost:*", "ws://127.0.0.1:*", "http://127.0.0.1:*", "https://*"],
+        frameAncestors: ["'self'", "https://*.google.com", "https://*.aistudio.google", "https://*.run.app"],
         upgradeInsecureRequests: isProd ? [] : null,
       },
     },
     crossOriginEmbedderPolicy: false,
+    frameguard: false,
   })
 );
 
